@@ -1,0 +1,32 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-sgip}
+      POSTGRES_USER: ${POSTGRES_USER:-sgip}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-sgip}
+    ports:
+      - "5432:5432"
+    volumes:
+      - sgip-postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  api:
+    build: ./backend
+    environment:
+      NODE_ENV: production
+      PORT: 5000
+      DATABASE_URL: postgresql://${POSTGRES_USER:-sgip}:${POSTGRES_PASSWORD:-sgip}@postgres:5432/${POSTGRES_DB:-sgip}?schema=public
+      CORS_ORIGIN: http://localhost:5173
+    ports:
+      - "5000:5000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  sgip-postgres:

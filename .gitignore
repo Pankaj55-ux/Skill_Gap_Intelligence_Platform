@@ -1,0 +1,11 @@
+node_modules/
+dist/
+.env
+.env.local
+uploads/
+*.tsbuildinfo
+backend/src/generated/prisma/
+coverage/
+playwright-report/
+*.log
+.DS_Store

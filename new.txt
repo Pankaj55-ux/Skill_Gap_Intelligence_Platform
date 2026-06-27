@@ -1,0 +1,2 @@
+npm run db:migrate -w backend -- --name init
+npm run db:seed -w backend

@@ -1,0 +1,187 @@
+import { useMutation, useQuery } from "@tanstack/react-query";
+import { AlertTriangle, FolderKanban, Loader2, Sparkles } from "lucide-react";
+import { useMemo, useState } from "react";
+import toast from "react-hot-toast";
+import { EmptyState } from "../../components/common/EmptyState";
+import { CardSkeleton } from "../../components/ui/Skeleton";
+import { queryTimes } from "../../lib/queryConfig";
+import { queryKeys } from "../../lib/queryKeys";
+import { projectsService } from "./projects.service";
+import type { ProjectDifficulty, ProjectRecommendationOutput, RecommendedProject } from "./projects.types";
+
+const buckets: Array<{ key: keyof ProjectRecommendationOutput; title: string; difficulty: ProjectDifficulty }> = [
+  { key: "beginnerProjects", title: "Beginner Projects", difficulty: "BEGINNER" },
+  { key: "intermediateProjects", title: "Intermediate Projects", difficulty: "INTERMEDIATE" },
+  { key: "advancedProjects", title: "Advanced Projects", difficulty: "ADVANCED" },
+];
+
+function ProjectCard({ project }: { project: RecommendedProject }) {
+  return (
+    <article className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <p className="text-xs font-bold uppercase tracking-wide text-blue-600 dark:text-blue-300">{project.difficulty}</p>
+          <h3 className="mt-2 text-lg font-extrabold text-slate-950 dark:text-white">{project.title}</h3>
+        </div>
+        <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+          {project.estimatedWeeks} week{project.estimatedWeeks === 1 ? "" : "s"}
+        </span>
+      </div>
+      <p className="mt-4 text-sm leading-6 text-slate-600 dark:text-slate-300">{project.description}</p>
+      <p className="mt-4 text-sm font-semibold text-slate-800 dark:text-slate-100">{project.learningOutcome}</p>
+      <div className="mt-4 flex flex-wrap gap-2">
+        {project.skillsCovered.map((skill) => (
+          <span key={skill} className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-bold text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-200">
+            {skill}
+          </span>
+        ))}
+      </div>
+      {project.githubTopics.length > 0 ? (
+        <div className="mt-3 flex flex-wrap gap-2">
+          {project.githubTopics.map((topic) => (
+            <span key={topic} className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+              #{topic}
+            </span>
+          ))}
+        </div>
+      ) : null}
+    </article>
+  );
+}
+
+export function ProjectsPage() {
+  const [targetRole, setTargetRole] = useState("");
+  const [resumeAnalysisId, setResumeAnalysisId] = useState("");
+  const [roadmapId, setRoadmapId] = useState("");
+  const [recommendations, setRecommendations] = useState<ProjectRecommendationOutput | null>(null);
+
+  const roadmapsQuery = useQuery({
+    queryKey: queryKeys.projects.roadmaps(),
+    queryFn: projectsService.listRoadmaps,
+    staleTime: queryTimes.medium,
+  });
+
+  const selectedRoadmap = useMemo(
+    () => roadmapsQuery.data?.find((roadmap) => roadmap.id === roadmapId),
+    [roadmapId, roadmapsQuery.data],
+  );
+
+  const recommendMutation = useMutation({
+    mutationFn: projectsService.recommend,
+    onSuccess: (result) => {
+      setRecommendations(result);
+      toast.success("Project recommendations generated");
+    },
+  });
+
+  const canSubmit = targetRole.trim().length >= 2 && resumeAnalysisId.trim().length > 0 && roadmapId.length > 0;
+
+  if (roadmapsQuery.isLoading) {
+    return (
+      <div className="space-y-6">
+        <CardSkeleton />
+        <div className="grid gap-4 lg:grid-cols-3"><CardSkeleton /><CardSkeleton /><CardSkeleton /></div>
+      </div>
+    );
+  }
+
+  if (roadmapsQuery.isError) {
+    return (
+      <EmptyState
+        title="Projects module could not load roadmaps"
+        description="Project recommendations need an existing roadmap from the backend before they can be generated."
+        icon={<AlertTriangle className="h-8 w-8" />}
+      />
+    );
+  }
+
+  const roadmaps = roadmapsQuery.data ?? [];
+
+  return (
+    <div className="space-y-6">
+      <section className="rounded-3xl border border-slate-200 bg-gradient-to-br from-white via-blue-50 to-cyan-50 p-6 shadow-sm dark:border-slate-800 dark:from-slate-900 dark:via-blue-950/30 dark:to-slate-950">
+        <p className="text-sm font-bold uppercase tracking-[0.22em] text-blue-600 dark:text-blue-300">Projects</p>
+        <h1 className="mt-3 text-3xl font-extrabold text-slate-950 sm:text-4xl dark:text-white">Portfolio project recommendations</h1>
+        <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-600 dark:text-slate-300">
+          Recommendations are generated by the backend from your roadmap, resume analysis, and missing skills.
+        </p>
+      </section>
+
+      {roadmaps.length === 0 ? (
+        <EmptyState title="No roadmaps available" description="Generate a roadmap first, then return here for project recommendations." />
+      ) : (
+        <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+          <div className="grid gap-4 lg:grid-cols-3">
+            <label className="block">
+              <span className="label">Target role</span>
+              <input className="input" value={targetRole} onChange={(event) => setTargetRole(event.target.value)} placeholder="Frontend Developer" />
+            </label>
+            <label className="block">
+              <span className="label">Resume analysis ID</span>
+              <input className="input" value={resumeAnalysisId} onChange={(event) => setResumeAnalysisId(event.target.value)} placeholder="UUID from resume analysis" />
+            </label>
+            <label className="block">
+              <span className="label">Roadmap</span>
+              <select className="input" value={roadmapId} onChange={(event) => setRoadmapId(event.target.value)}>
+                <option value="">Select roadmap</option>
+                {roadmaps.map((roadmap) => <option key={roadmap.id} value={roadmap.id}>{roadmap.title}</option>)}
+              </select>
+            </label>
+          </div>
+          {selectedRoadmap ? (
+            <p className="mt-3 text-sm text-slate-500 dark:text-slate-400">
+              Using roadmap for {selectedRoadmap.careerRole.title} with readiness score {selectedRoadmap.gapReport?.readinessScore ?? "not available"}.
+            </p>
+          ) : null}
+          <div className="mt-5 flex justify-end">
+            <button
+              type="button"
+              className="btn-primary"
+              disabled={!canSubmit || recommendMutation.isPending}
+              onClick={() => recommendMutation.mutate({ targetRole: targetRole.trim(), resumeAnalysisId: resumeAnalysisId.trim(), roadmapId })}
+            >
+              {recommendMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+              Generate projects
+            </button>
+          </div>
+        </section>
+      )}
+
+      {recommendMutation.isError ? (
+        <EmptyState
+          title="Project recommendations failed"
+          description="The backend error message was shown as a toast. Check that the resume analysis ID belongs to an analyzed resume and that the roadmap has missing skills."
+          icon={<AlertTriangle className="h-8 w-8" />}
+        />
+      ) : null}
+
+      {!recommendations && !recommendMutation.isError ? (
+        <EmptyState
+          title="No project recommendations yet"
+          description="Generate recommendations to see beginner, intermediate, and advanced project ideas from backend AI."
+          icon={<FolderKanban className="h-8 w-8" />}
+        />
+      ) : null}
+
+      {recommendations ? (
+        <div className="space-y-6">
+          {buckets.map((bucket) => {
+            const projects = recommendations[bucket.key];
+            return (
+              <section key={bucket.key} className="space-y-4">
+                <h2 className="text-xl font-extrabold text-slate-950 dark:text-white">{bucket.title}</h2>
+                {projects.length === 0 ? (
+                  <EmptyState title={`No ${bucket.difficulty.toLowerCase()} projects returned`} description="The backend did not return projects for this difficulty bucket." />
+                ) : (
+                  <div className="grid gap-4 lg:grid-cols-2">
+                    {projects.map((project) => <ProjectCard key={`${project.difficulty}:${project.title}`} project={project} />)}
+                  </div>
+                )}
+              </section>
+            );
+          })}
+        </div>
+      ) : null}
+    </div>
+  );
+}
